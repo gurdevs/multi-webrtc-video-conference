@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Video Platform by smartData</title>
+	<style type="text/css">
+	video {
+		width: 30%;
+		border-radius: 15px;
+	}
+	</style>
+	<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="assets/css/style.css">
+	<script src="./rmc3.min.js"></script>
+	<script src="./socket.io.js"></script>
+
+</head>
+
+<body>
+<div>Video Platform by smartData Enterprises</div>
+<div id="create-room-container" style="display: none;">
+	<div class="create_room">
+		<input id="txt-host-name" placeholder="Your name" />
+		<input id="txt-roomid" placeholder="Uniquie room id" />
+		<button id="btn-open-or-join-room">Create Room</button>
+	</div>
+</div>
+<div id="join-room-container" style="display: none;">
+	<div class="create_room">
+		<input id="txt-display-name" placeholder="Your Name" />
+		<button id="btn-join-room" onclick="joinRoom();">Join</button>
+	</div>
+</div>
+
+<div id='main_wrapper' class="main_wrapper" >
+	<div class="container">
+		<div class="row">
+			<div id="room-link"></div>
+			<div class="participants">
+				<div id="remote-videos-container"></div>
+			</div>
+			<div class="Video_Chat">
+				<div class="chat">
+					<div id="text-chat-container" style="visibility: hidden;">
+						<form onsubmit="broadcastTextMessage();return false">
+						<div id="text-chat-messages"></div>
+						<div class="send_msg">
+							<input type="text" id='txt-message' />
+							<button type="submit" id='send-button'  >Send</button>
+						</div>
+					</form>
+					</div>
+				</div>
+				<div class="video_wrap">
+					<div id="local-videos-container">
+						<div id='action-buttons' style='visibility:hidden;'>
+							<button id="mute-camera" onclick="muteVideo()">
+								<img id="img-video" height="20px" width="20px" src="assets/images/video.svg" alt=""/>
+							</button>
+							<button id="mute-audio" onclick="muteAudio()">
+								<img id="img-audio" height="20px" width="20px" src="assets/images/mic.svg" alt=""/>
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+
+</body>
+</html>
+<script type="text/JavaScript">
+
+	var cameraMuted = false;
+	var audioMuted = false;
+	var localVideoId = '';
+
+	var connection = new RTCMultiConnection();
+	var displayName = "";
+
+
+	connection.socketURL = 'https://allsmartvideo.net:9000/';
+
+	connection.session = {
+		audio:true,
+		video:true,
+		data:true
+	};
+
+	connection.sdpConstraints.mandatory = {
+		OfferToReceiveAudio:true,
+		OfferToReceiveVideo:true
+	};
+
+	var localVideosContainer = document.getElementById('local-videos-container')
+	var remoteVideosContainer = document.getElementById('remote-videos-container')
+
+	const params = new URLSearchParams(window.location.search)
+	if(params.has('roomid')) {
+		showJoinRoomDiv();
+	}
+	else {
+		var divCreateRoom = document.getElementById('create-room-container');
+		divCreateRoom.style.display = 'flex';
+	}
+
+	function showJoinRoomDiv() {
+		var divJoinRoom = document.getElementById('join-room-container');
+		divJoinRoom.style.display = 'flex';
+
+		var divMainWrapper = document.getElementById('main_wrapper');
+		divMainWrapper.style.display = 'none';
+	}
+
+	function hideJoinRoomDiv() {
+		var divJoinRoom = document.getElementById('join-room-container');
+		divJoinRoom.style.display = 'none';
+
+		var divMainWrapper = document.getElementById('main_wrapper');
+		divMainWrapper.style.display = 'flex';
+	}
+
+	function joinRoom() {
+		var dpName = document.getElementById('txt-display-name').value;
+		if(dpName.trim() == "") {
+			alert('Please enter display name');
+			return;
+		}
+		displayName = dpName;
+		hideJoinRoomDiv();
+		var roomid = params.get('roomid')
+		//connection.openOrJoin(roomid || 'predefined-roomid');
+		connection.join(roomid, function(isJoined, roomid, error) {
+			if(isJoined === false) {
+				//alert(error); // maybe room doesn't exist or room is full or password is invalid
+				var divRoomLink = document.getElementById('room-link');
+				divRoomLink.innerHTML = 'Room not available.';
+			}
+			else {
+				//alert('Successfully joined the room.');
+				var divChat = document.getElementById('text-chat-container');
+				divChat.style.visibility = 'visible';
+
+				var divRoomLink = document.getElementById('room-link');
+				divRoomLink.innerHTML = 'Joined room:' + roomid;
+			}
+		});
+
+	}
+
+	var locStream;
+	connection.onstream = function(event) {
+		// var video = event.mediaElement;
+
+		let video = document.createElement('video')
+		video.id = event.streamid;
+		video.srcObject = event.stream;
+
+		if(event.mediaElement) {
+			event.mediaElement.muted = true;
+			delete event.mediaElement;
+		}
+		
+		if(event.type === 'local') {
+			console.log(event);
+			localVideoId = event.streamid;
+			video.muted = true;
+			//video.playsinline = true;
+			video.volume = 0;
+			localVideosContainer.appendChild(video);
+			document.getElementById('action-buttons').style.visibility = 'visible';
+			
+			var divCreateRoom = document.getElementById('create-room-container');
+			divCreateRoom.style.display = 'none';
+			divCreateRoom.style.visibility = 'hidden';
+
+			//var divMain = document.getElementById('main_wrapper');
+			//divMain.style.display = 'flex';
+			//divMain.style.visibility = 'visible';
+			
+		}
+
+		if(event.type === 'remote') {
+			console.log('STREAMID=',document.getElementById(event.streamid));
+
+			if(document.getElementById(event.streamid) == null && event.streamid != null) {
+				remoteVideosContainer.appendChild(video);
+			}
+		}
+
+		video.play();
+
+	};
+
+
+	connection.onstreamended = function(event) {
+		var video = document.getElementById(event.streamid);
+		if (video && video.parentNode) {
+			video.parentNode.removeChild(video);
+		}
+	};
+
+	connection.onmessage = function(event) {
+		//alert(event.userid + ' said: ' + event.data);
+		addChatMessage(event.data);
+	};
+
+
+
+	connection.onopen = function(event) {
+		var remoteUserId = event.userid;
+		console.log('UserID=',remoteUserId);
+
+	};
+
+	/*
+	connection.onmute = function(event) {
+		
+		if(event.muteType=="audio") { 
+			//connection.streamEvents[event.streamid].stream.mute('audio');
+			console.log('Audio muted.');
+		}
+		else if(event.muteType=="video") {
+			//connection.streamEvents[event.streamid].stream.mute('video');
+			console.log('Video muted.');
+		}
+	};
+
+	
+	connection.onunmute = function(event) {
+		if(event.muteType=="audio") { 
+			
+			//connection.streamEvents[event.streamid].stream.unmute('audio');
+			console.log('Audio un-muted.');
+		}
+		else if(event.muteType=="video") {
+			//connection.streamEvents[event.streamid].stream.unmute('video');
+			console.log('Video un-muted.');
+		}
+	};	
+	*/
+
+	var roomid = document.getElementById('txt-roomid')
+	roomid.value = connection.token();
+
+	document.getElementById('btn-open-or-join-room').onclick = function () {
+		var dpName = document.getElementById('txt-host-name').value;
+		if(dpName.trim() == "") {
+			alert('Please enter your name');
+			return;
+		}
+
+		this.disabled = true;
+		//connection.openOrJoin(roomid || 'predefined-roomid');
+
+		connection.open(roomid.value || 'predefined-roomid', function(isRoomOpened, roomid, error) {
+			if(error) {
+				alert(error);
+			}
+		
+			if(isRoomOpened === true) {
+				//alert('Successfully created the room.');
+				var divChat = document.getElementById('text-chat-container');
+				divChat.style.visibility = 'visible';
+				var joinURL = window.location.href + '?roomid='+roomid;
+				console.log('MeetingURL=',joinURL);
+				var divRoomLink = document.getElementById('room-link');
+				divRoomLink.innerHTML = joinURL;
+				displayName = document.getElementById('txt-host-name').value;
+			}
+		});
+	}
+
+	function broadcastTextMessage() {
+		var chatMessage = document.getElementById('txt-message').value;
+		//connection.socket.emit('chatMessage',chatMessage);
+		var msg = displayName + " said:" + chatMessage;
+
+		connection.send(msg);
+		addChatMessage(msg);
+		document.getElementById('txt-message').value = '';
+	}
+
+	function addChatMessage(textMessage) {
+		var divChatMessages = document.getElementById('text-chat-messages');
+		var txt = '<p>' + textMessage + '<br>';
+		divChatMessages.innerHTML = divChatMessages.innerHTML + txt;
+	}
+
+	function muteVideo() {
+		var localStream = connection.attachStreams[0];
+		
+		var btn = document.getElementById('img-video');
+		
+		if(cameraMuted === false) {
+			//localStream.mute('video');
+			localStream.mute('video');
+			cameraMuted = true;
+			btn.src = "assets/images/video-muted.svg";
+		}
+		else {
+			//localStream.unmute('video');
+			//connection.streamEvents[localVideoId].stream.unmute('video');
+			localStream.unmute('video');
+			cameraMuted = false;
+			btn.src = "assets/images/video.svg";
+		}
+	}
+
+	function muteAudio() {
+		var localStream = connection.attachStreams[0];
+		var btn = document.getElementById('img-audio');
+
+		if(audioMuted === false) {
+			localStream.mute('audio');
+			audioMuted = true;
+			btn.src = "assets/images/mic-muted.svg";
+		}
+		else {
+			localStream.unmute('audio');
+			audioMuted = false;
+			btn.src = "assets/images/mic.svg";
+		}
+	}
+	</script>
